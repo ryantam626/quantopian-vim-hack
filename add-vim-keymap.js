@@ -5451,3 +5451,5 @@
   };
   // Initialize Vim and make it available as an API.
   CodeMirror.Vim = Vim();
+
+  quanto.editor.doc.cm.options['keyMap'] = 'vim';
