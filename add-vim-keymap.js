@@ -948,7 +948,8 @@
       defineRegister: defineRegister,
 
       exitVisualMode: exitVisualMode,
-      exitInsertMode: exitInsertMode
+      exitInsertMode: exitInsertMode,
+      attachVimMap: attachVimMap
     };
 
     // Represents the current input state.
@@ -5452,4 +5453,6 @@
   // Initialize Vim and make it available as an API.
   CodeMirror.Vim = Vim();
 
-  quanto.editor.doc.cm.options['keyMap'] = 'vim';
+  const quantopianCm = quanto.editor.doc.cm;
+  quantopianCm.setOption("keyMap", "vim");
+  CodeMirror.Vim.attachVimMap(quantopianCm);
