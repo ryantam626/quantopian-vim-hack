@@ -1,3 +1,61 @@
+// This is not exactly Sublime's algorithm. I couldn't make heads or tails of that.
+function findPosSubword(doc, start, dir) {
+    if (dir < 0 && start.ch == 0) return doc.clipPos(Pos(start.line - 1));
+    var line = doc.getLine(start.line);
+    if (dir > 0 && start.ch >= line.length) return doc.clipPos(Pos(start.line + 1, 0));
+    var state = "start", type, startPos = start.ch;
+    for (var pos = startPos, e = dir < 0 ? 0 : line.length, i = 0; pos != e; pos += dir, i++) {
+        var next = line.charAt(dir < 0 ? pos - 1 : pos);
+        var cat = next != "_" && CodeMirror.isWordChar(next) ? "w" : "o";
+        if (cat == "w" && next.toUpperCase() == next) cat = "W";
+        if (state == "start") {
+            if (cat != "o") { state = "in"; type = cat; }
+            else startPos = pos + dir
+        } else if (state == "in") {
+            if (type != cat) {
+                if (type == "w" && cat == "W" && dir < 0) pos--;
+                if (type == "W" && cat == "w" && dir > 0) { // From uppercase to lowercase
+                    if (pos == startPos + 1) { type = "w"; continue; }
+                    else pos--;
+                }
+                break;
+            }
+        }
+    }
+    return Pos(start.line, pos);
+};
+
+function moveSubword(cm, actionArgs) {
+    cm.extendSelectionsBy(function(range) {
+        if (cm.display.shift || cm.doc.extend || range.empty())
+            return findPosSubword(cm.doc, range.head, actionArgs.dir);
+        else
+            return actionArgs.dir < 0 ? range.from() : range.to();
+    });
+};
+function deleteSubword(cm, actionArgs) {
+    const starts = cm.listSelections();
+    if (starts.some((pos) => (pos.head.ch !== pos.anchor.ch))) {
+        console.log("Ignored attempt to delete subword!");
+        return;
+    }
+
+    moveSubword(cm, actionArgs);
+    const ends = cm.listSelections();
+    cm.setSelections(starts);
+    if (starts.length !== ends.length) {
+        // NOTE: Edge case where select are part of the same subword, need more thoughts on this.)
+        console.log("Inogred attempt to delete subword, because some selection is part of the same subword");
+        return;
+    }
+
+    cm.operation(() => {
+        for (let i = 0; i < starts.length; i++) {
+            cm.replaceRange("", starts[i].head, ends[i].head, "+delete");
+        }
+    });
+}
+
   var defaultKeymap = [
     // Key to key mapping. This goes first to make it possible to override
     // existing mappings.
@@ -833,6 +891,16 @@
             return true;
           }
         }
+        function handleSubwordThings() {
+            if (key == '<A-BS>') {
+                deleteSubword(cm, {dir: -1});
+                return true;
+            } else if (key == '<A-Del>') {
+                deleteSubword(cm, {dir: 1});
+                return true;
+            }
+        }
+
         function doKeyToKey(keys) {
           // TODO: prevent infinite recursion.
           var match;
@@ -847,7 +915,7 @@
         }
 
         function handleKeyInsertMode() {
-          if (handleEsc()) { return true; }
+          if (handleEsc() || handleSubwordThings()) { return true; }
           var keys = vim.inputState.keyBuffer = vim.inputState.keyBuffer + key;
           var keysAreChars = key.length == 1;
           var match = commandDispatcher.matchCommand(keys, defaultKeymap, vim.inputState, 'insert');
